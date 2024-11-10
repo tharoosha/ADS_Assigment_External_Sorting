@@ -1,191 +1,289 @@
-import java.util.*;
+ import java.util.*; // For ArrayList
 
-public class FibonacciHeap<T> {
-    private Node<T> minNode;
-    private int size;
+ public final class FibonacciHeap<T> {
 
-    public static class Node<T> {
-        T key;
-        double priority;
-        int degree;
-        boolean marked;
-        Node<T> parent;
-        Node<T> child;
-        Node<T> left;
-        Node<T> right;
+     public static final class Entry<T> {
+         private int     mDegree = 0;       // Number of children
+         private boolean mIsMarked = false; // Whether this node is marked
+ 
+         private Entry<T> mNext;   // Next and previous elements in the list
+         private Entry<T> mPrev;
+ 
+         private Entry<T> mParent; // Parent in the tree, if any.
+ 
+         private Entry<T> mChild;  // Child node, if any.
+ 
+         private T      mElem;     // Element being stored here
+         private double mPriority; // Its priority
+ 
+ 
+         public T getValue() {
+             return mElem;
+         }
 
-        public Node(T key, double priority) {
-            this.key = key;
-            this.priority = priority;
-            this.left = this;
-            this.right = this;
-        }
+         public void setValue(T value) {
+             mElem = value;
+         }
 
-        public T getKey() {
-            return key;
-        }
-    }
+         public double getPriority() {
+             return mPriority;
+         }
+ 
 
-    public Node<T> insert(T key, double priority) {
-        Node<T> node = new Node<>(key, priority);
-        minNode = mergeNodes(minNode, node);
-        size++;
-        return node;
-    }
+         private Entry(T elem, double priority) {
+             mNext = mPrev = this;
+             mElem = elem;
+             mPriority = priority;
+         }
+     }
+ 
 
-    public boolean isEmpty() {
-        return minNode == null;
-    }
+     private Entry<T> mMin = null;
+ 
+     private int mSize = 0;
 
-    public Node<T> extractMin() {
-        Node<T> extractedMin = minNode;
-        if (extractedMin != null) {
-            if (extractedMin.child != null) {
-                Node<T> child = extractedMin.child;
-                do {
-                    child.parent = null;
-                    child = child.right;
-                } while (child != extractedMin.child);
-                minNode = mergeNodes(minNode, extractedMin.child);
-            }
+     public Entry<T> enqueue(T value, double priority) {
+         checkPriority(priority);
 
-            if (extractedMin.right == extractedMin) {
-                minNode = null;
-            } else {
-                minNode = extractedMin.right;
-                extractedMin.right.left = extractedMin.left;
-                extractedMin.left.right = extractedMin.right;
-                consolidate();
-            }
-            size--;
-        }
-        return extractedMin;
-    }
+         Entry<T> result = new Entry<T>(value, priority);
+ 
+         // Merge this singleton list with the tree list. 
+         mMin = mergeLists(mMin, result);
+ 
+         // Increase the size of the heap; we just added something. 
+         ++mSize;
+ 
+         // Return the reference to the new element. 
+         return result;
+     }
+ 
+     public Entry<T> min() {
+         if (isEmpty())
+             throw new NoSuchElementException("Heap is empty.");
+         return mMin;
+     }
 
-    public void decreaseKey(Node<T> node, double newPriority) {
-        if (newPriority > node.priority) {
-            throw new IllegalArgumentException("New priority is greater than current priority");
-        }
-        node.priority = newPriority;
-        Node<T> parent = node.parent;
+     public boolean isEmpty() {
+         return mMin == null;
+     }
 
-        if (parent != null && node.priority < parent.priority) {
-            cut(node, parent);
-            cascadingCut(parent);
-        }
+     public int size() {
+         return mSize;
+     }
+ 
 
-        if (node.priority < minNode.priority) {
-            minNode = node;
-        }
-    }
+     public static <T> FibonacciHeap<T> merge(FibonacciHeap<T> one, FibonacciHeap<T> two) {
+         // Create a new FibonacciHeap to hold the result. 
+         FibonacciHeap<T> result = new FibonacciHeap<T>();
+ 
 
-    private void cut(Node<T> node, Node<T> parent) {
-        if (node.right != node) {
-            node.right.left = node.left;
-            node.left.right = node.right;
-        }
+         result.mMin = mergeLists(one.mMin, two.mMin);
+ 
+         // The size of the new heap is the sum of the sizes of the input heaps. 
+         result.mSize = one.mSize + two.mSize;
+ 
+         // Clear the old heaps. 
+         one.mSize = two.mSize = 0;
+         one.mMin  = null;
+         two.mMin  = null;
+ 
+         // Return the newly-merged heap. 
+         return result;
+     }
+ 
 
-        if (parent.child == node) {
-            if (node.right != node) {
-                parent.child = node.right;
-            } else {
-                parent.child = null;
-            }
-        }
+     public Entry<T> dequeueMin() {
+         // Check for whether we're empty. 
+         if (isEmpty())
+             throw new NoSuchElementException("Heap is empty.");
 
-        parent.degree--;
-        node.parent = null;
-        node.left = node;
-        node.right = node;
-        node.marked = false;
-        minNode = mergeNodes(minNode, node);
-    }
+         --mSize;
+ 
+         // Grab the minimum element so we know what to return. 
+         Entry<T> minElem = mMin;
 
-    private void cascadingCut(Node<T> node) {
-        Node<T> parent = node.parent;
-        if (parent != null) {
-            if (!node.marked) {
-                node.marked = true;
-            } else {
-                cut(node, parent);
-                cascadingCut(parent);
-            }
-        }
-    }
+         if (mMin.mNext == mMin) { // Case one
+             mMin = null;
+         }
+         else { // Case two
+             mMin.mPrev.mNext = mMin.mNext;
+             mMin.mNext.mPrev = mMin.mPrev;
+             mMin = mMin.mNext; // Arbitrary element of the root list.
+         }
+ 
 
-    private void consolidate() {
-        int arraySize = (int) Math.floor(Math.log(size) / Math.log(2)) + 1;
-        List<Node<T>> degreeTable = new ArrayList<>(Collections.nCopies(arraySize, null));
+         if (minElem.mChild != null) {
+             // Keep track of the first visited node. 
+             Entry<?> curr = minElem.mChild;
+             do {
+                 curr.mParent = null;
+ 
 
-        List<Node<T>> nodes = new ArrayList<>();
-        for (Node<T> current = minNode; nodes.isEmpty() || nodes.get(0) != current; current = current.right) {
-            nodes.add(current);
-        }
+                 curr = curr.mNext;
+             } while (curr != minElem.mChild);
+         }
+ 
 
-        for (Node<T> current : nodes) {
-            int degree = current.degree;
+         mMin = mergeLists(mMin, minElem.mChild);
+ 
+         // If there are no entries left, we're done. 
+         if (mMin == null) return minElem;
+ 
 
-            // while (degree >= degreeTable.size()) {
-            //     degreeTable.add(null);
-            // }
+         List<Entry<T>> treeTable = new ArrayList<Entry<T>>();
+ 
 
-            while (degreeTable.get(degree) != null) {
-                Node<T> other = degreeTable.get(degree);
-                if (current.priority > other.priority) {
-                    Node<T> temp = current;
-                    current = other;
-                    other = temp;
-                }
-                linkHeaps(other, current);
-                degreeTable.set(degree, null);
-                degree++;
-            }
-            degreeTable.set(degree, current);
-        }
+         List<Entry<T>> toVisit = new ArrayList<Entry<T>>();
+ 
 
-        minNode = null;
-        for (Node<T> node : degreeTable) {
-            if (node != null) {
-                minNode = mergeNodes(minNode, node);
-            }
-        }
-    }
+         for (Entry<T> curr = mMin; toVisit.isEmpty() || toVisit.get(0) != curr; curr = curr.mNext)
+             toVisit.add(curr);
+ 
+         // Traverse this list and perform the appropriate unioning steps. 
+         for (Entry<T> curr: toVisit) {
+             // Keep merging until a match arises. 
+             while (true) {
 
-    private void linkHeaps(Node<T> minNode, Node<T> other) {
-        other.left.right = other.right;
-        other.right.left = other.left;
+                 while (curr.mDegree >= treeTable.size())
+                     treeTable.add(null);
 
-        other.parent = minNode;
-        if (minNode.child == null) {
-            minNode.child = other;
-            other.right = other;
-            other.left = other;
-        } else {
-            other.left = minNode.child;
-            other.right = minNode.child.right;
-            minNode.child.right.left = other;
-            minNode.child.right = other;
-        }
-        minNode.degree++;
-        other.marked = false;
-    }
+                 if (treeTable.get(curr.mDegree) == null) {
+                     treeTable.set(curr.mDegree, curr);
+                     break;
+                 }
+ 
+                 // Otherwise, merge with what's there. 
+                 Entry<T> other = treeTable.get(curr.mDegree);
+                 treeTable.set(curr.mDegree, null); // Clear the slot
+ 
+                 Entry<T> min = (other.mPriority < curr.mPriority)? other : curr;
+                 Entry<T> max = (other.mPriority < curr.mPriority)? curr  : other;
+ 
 
-    private Node<T> mergeNodes(Node<T> a, Node<T> b) {
-        if (a == null) return b;
-        if (b == null) return a;
+                 max.mNext.mPrev = max.mPrev;
+                 max.mPrev.mNext = max.mNext;
+ 
+                 // Make it a singleton so that we can merge it. 
+                 max.mNext = max.mPrev = max;
+                 min.mChild = mergeLists(min.mChild, max);
+                 
+                 // Reparent max appropriately. 
+                 max.mParent = min;
+ 
+                 // Clear max's mark, since it can now lose another child. 
+                 max.mIsMarked = false;
+ 
+                 // Increase min's degree; it now has another child.
+                 ++min.mDegree;
+ 
+                 // Continue merging this tree. 
+                 curr = min;
+             }
+ 
 
-        if (a.priority > b.priority) {
-            Node<T> temp = a;
-            a = b;
-            b = temp;
-        }
+             if (curr.mPriority <= mMin.mPriority) mMin = curr;
+         }
+         return minElem;
+     }
+ 
 
-        Node<T> aRight = a.right;
-        a.right = b.right;
-        b.right.left = a;
-        b.right = aRight;
-        aRight.left = b;
+     public void decreaseKey(Entry<T> entry, double newPriority) {
+         checkPriority(newPriority);
+         if (newPriority > entry.mPriority)
+             throw new IllegalArgumentException("New priority exceeds old.");
+ 
+         // Forward this to a helper function. 
+         decreaseKeyUnchecked(entry, newPriority);
+     }
 
-        return a;
-    }
-}
+     public void delete(Entry<T> entry) {
+
+         decreaseKeyUnchecked(entry, Double.NEGATIVE_INFINITY);
+ 
+         // Call dequeueMin to remove it. 
+         dequeueMin();
+     }
+
+     private void checkPriority(double priority) {
+         if (Double.isNaN(priority))
+             throw new IllegalArgumentException(priority + " is invalid.");
+     }
+ 
+
+     private static <T> Entry<T> mergeLists(Entry<T> one, Entry<T> two) {
+
+         if (one == null && two == null) { // Both null, resulting list is null.
+             return null;
+         }
+         else if (one != null && two == null) { // Two is null, result is one.
+             return one;
+         }
+         else if (one == null && two != null) { // One is null, result is two.
+             return two;
+         }
+         else { 
+             Entry<T> oneNext = one.mNext; // Cache this since we're about to overwrite it.
+             one.mNext = two.mNext;
+             one.mNext.mPrev = one;
+             two.mNext = oneNext;
+             two.mNext.mPrev = two;
+ 
+             // Return a pointer to whichever's smaller. 
+             return one.mPriority < two.mPriority? one : two;
+         }
+     }
+
+     private void decreaseKeyUnchecked(Entry<T> entry, double priority) {
+         // First, change the node's priority. 
+         entry.mPriority = priority;
+ 
+
+         if (entry.mParent != null && entry.mPriority <= entry.mParent.mPriority)
+             cutNode(entry);
+
+         if (entry.mPriority <= mMin.mPriority)
+             mMin = entry;
+     }
+ 
+ 
+     private void cutNode(Entry<T> entry) {
+         // Begin by clearing the node's mark, since we just cut it. 
+         entry.mIsMarked = false;
+ 
+         // Base case: If the node has no parent, we're done. 
+         if (entry.mParent == null) return;
+ 
+         // Rewire the node's siblings around it, if it has any siblings. 
+         if (entry.mNext != entry) { // Has siblings
+             entry.mNext.mPrev = entry.mPrev;
+             entry.mPrev.mNext = entry.mNext;
+         }
+
+         if (entry.mParent.mChild == entry) {
+             // If there are any other children, pick one of them arbitrarily. 
+             if (entry.mNext != entry) {
+                 entry.mParent.mChild = entry.mNext;
+             }
+
+             else {
+                 entry.mParent.mChild = null;
+             }
+         }
+ 
+         // Decrease the degree of the parent, since it just lost a child. 
+         --entry.mParent.mDegree;
+ 
+
+         entry.mPrev = entry.mNext = entry;
+         mMin = mergeLists(mMin, entry);
+ 
+
+         if (entry.mParent.mIsMarked)
+             cutNode(entry.mParent);
+         else
+             entry.mParent.mIsMarked = true;
+ 
+         // Clear the relocated node's parent; it's now a root. 
+         entry.mParent = null;
+     }
+ }

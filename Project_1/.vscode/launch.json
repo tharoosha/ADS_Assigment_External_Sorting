@@ -15,8 +15,7 @@
             "name": "dijikstra",
             "request": "launch",
             "mainClass": "dijikstra",
-            "projectName": "Project_1_d6610be",
-            // "args": ["-f", "./src/inputs/input_2.txt"]
+            "projectName": "Project_1_d6610be",            
             "args": ["-r", "1000", "1", "0"]
 
         }
